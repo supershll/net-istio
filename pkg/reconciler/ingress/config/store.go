@@ -53,7 +53,7 @@ func GenConfigIstioWithIngress(ctx context.Context, ing *v1alpha1.Ingress) *Isti
 				Namespace:  userDefinedExternalGatewaySplitArr[0],
 				ServiceURL: userDefinedIngressGatewayUrl,
 			}
-			ci.IngressGateways = append(ci.IngressGateways, gateway)
+			ci.IngressGateways[0] = gateway
 		}
 
 		userDefinedLocalGateway := strings.TrimSpace(ing.Annotations["networking.knative.dev/gateway.local"])
@@ -66,7 +66,7 @@ func GenConfigIstioWithIngress(ctx context.Context, ing *v1alpha1.Ingress) *Isti
 				Namespace:  userDefinedLocalGatewaySplitArr[0],
 				ServiceURL: userDefinedLocalGatewayUrl,
 			}
-			ci.LocalGateways = append(ci.LocalGateways, gateway)
+			ci.LocalGateways[0] = gateway
 		}
 	}
 
