@@ -104,7 +104,8 @@ func MakeIngressTLSGateways(ctx context.Context, ing *v1alpha1.Ingress, ingressT
 	if len(ingressTLS) == 0 {
 		return []*v1alpha3.Gateway{}, nil
 	}
-	gatewayServices, err := getGatewayServices(ctx, svcLister)
+	// ludqfix
+	gatewayServices, err := getGatewayServices(ctx, svcLister, ing)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +123,12 @@ func MakeIngressTLSGateways(ctx context.Context, ing *v1alpha1.Ingress, ingressT
 // MakeWildcardGateways creates gateways with wildcard hosts based on the wildcard secret information.
 // For each public ingress service, we will create a list of Gateways. Each Gateway of the list corresponds to a wildcard cert secret.
 func MakeWildcardGateways(ctx context.Context, originWildcardSecrets map[string]*corev1.Secret,
-	svcLister corev1listers.ServiceLister) ([]*v1alpha3.Gateway, error) {
+	svcLister corev1listers.ServiceLister, ing *v1alpha1.Ingress) ([]*v1alpha3.Gateway, error) {
 	if len(originWildcardSecrets) == 0 {
 		return []*v1alpha3.Gateway{}, nil
 	}
-	gatewayServices, err := getGatewayServices(ctx, svcLister)
+	// ludqfix
+	gatewayServices, err := getGatewayServices(ctx, svcLister, ing)
 	if err != nil {
 		return nil, err
 	}
@@ -244,8 +246,9 @@ func makeIngressTLSGateway(ing *v1alpha1.Ingress, originSecrets map[string]*core
 	}, nil
 }
 
-func getGatewayServices(ctx context.Context, svcLister corev1listers.ServiceLister) ([]*corev1.Service, error) {
-	ingressSvcMetas, err := GetIngressGatewaySvcNameNamespaces(ctx)
+// ludqfix
+func getGatewayServices(ctx context.Context, svcLister corev1listers.ServiceLister, ing *v1alpha1.Ingress) ([]*corev1.Service, error) {
+	ingressSvcMetas, err := GetIngressGatewaySvcNameNamespaces(ctx, ing)
 	if err != nil {
 		return nil, err
 	}
@@ -349,8 +352,9 @@ func ServiceNamespaceFromURL(svc string) (string, error) {
 
 // TODO(nghia):  Remove this by parsing at config parsing time.
 // GetIngressGatewaySvcNameNamespaces gets the Istio ingress namespaces from ConfigMap.
-func GetIngressGatewaySvcNameNamespaces(ctx context.Context) ([]metav1.ObjectMeta, error) {
-	cfg := config.FromContext(ctx).Istio
+// ludqfix
+func GetIngressGatewaySvcNameNamespaces(ctx context.Context, ing *v1alpha1.Ingress) ([]metav1.ObjectMeta, error) {
+	cfg := config.GenConfigIstioWithIngress(ctx, ing)
 	nameNamespaces := make([]metav1.ObjectMeta, len(cfg.IngressGateways))
 	for i, ingressgateway := range cfg.IngressGateways {
 		parts := strings.SplitN(ingressgateway.ServiceURL, ".", 3)

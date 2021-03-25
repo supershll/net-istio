@@ -112,7 +112,8 @@ func (r *Reconciler) reconcileIngress(ctx context.Context, ing *v1alpha1.Ingress
 	ing.Status.InitializeConditions()
 	logger.Infof("Reconciling ingress: %#v", ing)
 
-	gatewayNames := qualifiedGatewayNamesFromContext(ctx)
+	// ludqfix
+	gatewayNames := qualifiedGatewayNamesFromContext(ctx, ing)
 	if r.shouldReconcileTLS(ctx, ing) {
 		originSecrets, err := resources.GetSecrets(ing, r.secretLister)
 		if err != nil {
@@ -122,11 +123,12 @@ func (r *Reconciler) reconcileIngress(ctx context.Context, ing *v1alpha1.Ingress
 		if err != nil {
 			return err
 		}
-		targetNonwildcardSecrets, err := resources.MakeSecrets(ctx, nonWildcardSecrets, ing)
+		// ludqfix
+		targetNonwildcardSecrets, err := resources.MakeSecrets(ctx, nonWildcardSecrets, ing, ing)
 		if err != nil {
 			return err
 		}
-		targetWildcardSecrets, err := resources.MakeWildcardSecrets(ctx, wildcardSecrets)
+		targetWildcardSecrets, err := resources.MakeWildcardSecrets(ctx, wildcardSecrets, ing)
 		if err != nil {
 			return err
 		}
@@ -151,7 +153,8 @@ func (r *Reconciler) reconcileIngress(ctx context.Context, ing *v1alpha1.Ingress
 		// same wildcard host. We need to handle wildcard certificate specially because Istio does
 		// not fully support multiple TLS Servers (or Gateways) share the same certificate.
 		// https://istio.io/docs/ops/common-problems/network-issues/
-		desiredWildcardGateways, err := resources.MakeWildcardGateways(ctx, wildcardSecrets, r.svcLister)
+		// ludqfix
+		desiredWildcardGateways, err := resources.MakeWildcardGateways(ctx, wildcardSecrets, r.svcLister, ing)
 		if err != nil {
 			return err
 		}
@@ -170,7 +173,13 @@ func (r *Reconciler) reconcileIngress(ctx context.Context, ing *v1alpha1.Ingress
 	// https://github.com/knative/serving/issues/6373
 	if config.FromContext(ctx).Network.AutoTLS {
 		desiredHTTPServer := resources.MakeHTTPServer(config.FromContext(ctx).Network.HTTPProtocol, []string{"*"})
-		for _, gw := range config.FromContext(ctx).Istio.IngressGateways {
+		// ludqfix
+		//for _, gw := range config.FromContext(ctx).Istio.IngressGateways {
+		//	if err := r.reconcileHTTPServer(ctx, ing, gw, desiredHTTPServer); err != nil {
+		//		return err
+		//	}
+		//}
+		for _, gw := range config.GenConfigIstioWithIngress(ctx, ing).IngressGateways {
 			if err := r.reconcileHTTPServer(ctx, ing, gw, desiredHTTPServer); err != nil {
 				return err
 			}
@@ -193,7 +202,13 @@ func (r *Reconciler) reconcileIngress(ctx context.Context, ing *v1alpha1.Ingress
 		// from the global Gateways. This code should be deleted in release 0.18.
 		// We should handle the deletion after VirtualService is created with the newly generated non-wildcard Gateway
 		// in order to make sure the ongoing traffic won't be affected.
-		for _, gw := range config.FromContext(ctx).Istio.IngressGateways {
+		// ludqfix
+		//for _, gw := range config.FromContext(ctx).Istio.IngressGateways {
+		//	if err := r.reconcileIngressServers(ctx, ing, gw, []*istiov1alpha3.Server{}); err != nil {
+		//		return err
+		//	}
+		//}
+		for _, gw := range config.GenConfigIstioWithIngress(ctx, ing).IngressGateways {
 			if err := r.reconcileIngressServers(ctx, ing, gw, []*istiov1alpha3.Server{}); err != nil {
 				return err
 			}
@@ -235,8 +250,9 @@ func (r *Reconciler) reconcileIngress(ctx context.Context, ing *v1alpha1.Ingress
 	}
 
 	if ready {
-		publicLbs := getLBStatus(publicGatewayServiceURLFromContext(ctx))
-		privateLbs := getLBStatus(privateGatewayServiceURLFromContext(ctx))
+		// ludqfix
+		publicLbs := getLBStatus(publicGatewayServiceURLFromContext(ctx, ing))
+		privateLbs := getLBStatus(privateGatewayServiceURLFromContext(ctx, ing))
 		ing.Status.MarkLoadBalancerReady(publicLbs, privateLbs)
 	} else {
 		ing.Status.MarkLoadBalancerNotReady()
@@ -354,7 +370,8 @@ func (r *Reconciler) reconcileVirtualServices(ctx context.Context, ing *v1alpha1
 
 func (r *Reconciler) FinalizeKind(ctx context.Context, ing *v1alpha1.Ingress) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
-	istiocfg := config.FromContext(ctx).Istio
+	// ludqfix
+	istiocfg := config.GenConfigIstioWithIngress(ctx, ing)
 	logger.Info("Cleaning up Gateway Servers")
 	for _, gws := range [][]config.Gateway{istiocfg.IngressGateways, istiocfg.LocalGateways} {
 		for _, gw := range gws {
@@ -374,7 +391,8 @@ func (r *Reconciler) reconcileDeletion(ctx context.Context, ing *v1alpha1.Ingres
 
 	errs := []error{}
 	for _, tls := range ing.Spec.TLS {
-		nameNamespaces, err := resources.GetIngressGatewaySvcNameNamespaces(ctx)
+		// ludqfix
+		nameNamespaces, err := resources.GetIngressGatewaySvcNameNamespaces(ctx, ing)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -460,9 +478,10 @@ func (r *Reconciler) GetVirtualServiceLister() istiolisters.VirtualServiceLister
 	return r.virtualServiceLister
 }
 
+// ludqfix
 // qualifiedGatewayNamesFromContext get gateway names from context
-func qualifiedGatewayNamesFromContext(ctx context.Context) map[v1alpha1.IngressVisibility]sets.String {
-	ci := config.FromContext(ctx).Istio
+func qualifiedGatewayNamesFromContext(ctx context.Context, ing *v1alpha1.Ingress) map[v1alpha1.IngressVisibility]sets.String {
+	ci := config.GenConfigIstioWithIngress(ctx, ing)
 	publicGateways := make(sets.String, len(ci.IngressGateways))
 	for _, gw := range ci.IngressGateways {
 		publicGateways.Insert(gw.QualifiedName())
@@ -479,8 +498,9 @@ func qualifiedGatewayNamesFromContext(ctx context.Context) map[v1alpha1.IngressV
 	}
 }
 
-func publicGatewayServiceURLFromContext(ctx context.Context) string {
-	cfg := config.FromContext(ctx).Istio
+// ludqfix
+func publicGatewayServiceURLFromContext(ctx context.Context, ing *v1alpha1.Ingress) string {
+	cfg := config.GenConfigIstioWithIngress(ctx, ing)
 	if len(cfg.IngressGateways) > 0 {
 		return cfg.IngressGateways[0].ServiceURL
 	}
@@ -488,8 +508,9 @@ func publicGatewayServiceURLFromContext(ctx context.Context) string {
 	return ""
 }
 
-func privateGatewayServiceURLFromContext(ctx context.Context) string {
-	cfg := config.FromContext(ctx).Istio
+// ludqfix
+func privateGatewayServiceURLFromContext(ctx context.Context, ing *v1alpha1.Ingress) string {
+	cfg := config.GenConfigIstioWithIngress(ctx, ing)
 	if len(cfg.LocalGateways) > 0 {
 		return cfg.LocalGateways[0].ServiceURL
 	}

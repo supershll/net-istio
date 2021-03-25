@@ -18,6 +18,8 @@ package config
 
 import (
 	"context"
+	"knative.dev/networking/pkg/apis/networking/v1alpha1"
+	"strings"
 
 	network "knative.dev/networking/pkg"
 	"knative.dev/pkg/configmap"
@@ -35,6 +37,40 @@ type Config struct {
 // FromContext fetch config from context.
 func FromContext(ctx context.Context) *Config {
 	return ctx.Value(cfgKey{}).(*Config)
+}
+
+// ludqfix
+func GenConfigIstioWithIngress(ctx context.Context, ing *v1alpha1.Ingress) *Istio {
+	ci := FromContext(ctx).Istio
+	if ing != nil {
+		userDefinedIngressGateway := strings.TrimSpace(ing.Annotations["networking.knative.dev/gateway.ingress"])
+		if userDefinedIngressGateway != "" {
+			ci.IngressGateways = make([]Gateway, 1)
+			userDefinedIngressGatewayUrl := strings.TrimSpace(ing.Annotations["networking.knative.dev/gateway.ingress.url"])
+			userDefinedExternalGatewaySplitArr := strings.Split(userDefinedIngressGateway, "/")
+			gateway := Gateway{
+				Name:       userDefinedExternalGatewaySplitArr[1],
+				Namespace:  userDefinedExternalGatewaySplitArr[0],
+				ServiceURL: userDefinedIngressGatewayUrl,
+			}
+			ci.IngressGateways = append(ci.IngressGateways, gateway)
+		}
+
+		userDefinedLocalGateway := strings.TrimSpace(ing.Annotations["networking.knative.dev/gateway.local"])
+		if userDefinedLocalGateway != "" {
+			ci.LocalGateways = make([]Gateway, 1)
+			userDefinedLocalGatewayUrl := strings.TrimSpace(ing.Annotations["networking.knative.dev/gateway.local.url"])
+			userDefinedLocalGatewaySplitArr := strings.Split(userDefinedLocalGateway, "/")
+			gateway := Gateway{
+				Name:       userDefinedLocalGatewaySplitArr[1],
+				Namespace:  userDefinedLocalGatewaySplitArr[0],
+				ServiceURL: userDefinedLocalGatewayUrl,
+			}
+			ci.LocalGateways = append(ci.LocalGateways, gateway)
+		}
+	}
+
+	return ci
 }
 
 // ToContext adds config to given context.

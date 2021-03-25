@@ -60,7 +60,8 @@ type gatewayPodTargetLister struct {
 
 func (l *gatewayPodTargetLister) ListProbeTargets(ctx context.Context, ing *v1alpha1.Ingress) ([]status.ProbeTarget, error) {
 	results := []status.ProbeTarget{}
-	hostsByGateway := ingress.HostsPerVisibility(ing, qualifiedGatewayNamesFromContext(ctx))
+	// ludqfix
+	hostsByGateway := ingress.HostsPerVisibility(ing, qualifiedGatewayNamesFromContext(ctx, ing))
 	gatewayNames := make([]string, 0, len(hostsByGateway))
 	for gatewayName := range hostsByGateway {
 		gatewayNames = append(gatewayNames, gatewayName)
